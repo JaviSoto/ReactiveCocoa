@@ -8,6 +8,8 @@
 
 #import "RACStreamExamples.h"
 
+#import "NSObject+RACPropertySubscribing.h"
+#import "RACDisposable.h"
 #import "RACStream.h"
 #import "RACUnit.h"
 #import "RACTuple.h"
@@ -179,6 +181,33 @@ sharedExamplesFor(RACStreamExamples, ^(NSDictionary *data) {
 			}];
 
 			verifyValues(zipped, @[ @0, @2, @4 ]);
+		});
+
+		it(@"should not leak returned streams", ^{
+			NSArray *values = @[ @1, @2, @3, @4, @5 ];
+			RACStream *baseStream = streamWithValues(values);
+
+			__block NSUInteger willDeallocCount = 0;
+			__block NSUInteger didDeallocCount = 0;
+
+			@autoreleasepool {
+				RACStream *boundStream = [baseStream bind:^{
+					return ^(id x, BOOL *stop) {
+						RACStream *newStream = [streamClass return:x];
+						[newStream rac_addDeallocDisposable:[RACDisposable disposableWithBlock:^{
+							didDeallocCount++;
+						}]];
+
+						willDeallocCount++;
+						return newStream;
+					};
+				}];
+
+				verifyValues(boundStream, values);
+			}
+
+			expect(willDeallocCount).to.equal(5);
+			expect(didDeallocCount).will.equal(willDeallocCount);
 		});
 	});
 
