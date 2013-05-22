@@ -438,4 +438,40 @@ describe(@"-objectPassingTest:", ^{
 	});
 });
 
+it(@"should not leak when filtered and converted to an array", ^{
+	__block NSUInteger didDeallocCount = 0;
+	__block NSUInteger willDeallocCount = 0;
+	
+	@autoreleasepool {
+		RACSequence *values = @[ @1, @2, @3, @4, @5 ].rac_sequence;
+		[values rac_addDeallocDisposable:[RACDisposable disposableWithBlock:^{
+			NSLog(@"deallocated base");
+			didDeallocCount++;
+		}]];
+
+		willDeallocCount = 1;
+
+		RACSequence *filtered = [values filter:^ BOOL (NSNumber *value) {
+			return value.intValue > 1;
+		}];
+
+		while (filtered.head != nil) {
+			id value = filtered.head;
+			NSLog(@"%@ = %p", value, filtered);
+
+			[filtered rac_addDeallocDisposable:[RACDisposable disposableWithBlock:^{
+				NSLog(@"deallocated %@", value);
+				didDeallocCount++;
+			}]];
+
+			willDeallocCount++;
+			filtered = filtered.tail;
+		}
+
+		expect(willDeallocCount).to.beGreaterThan(1);
+	}
+
+	expect(didDeallocCount).will.equal(willDeallocCount);
+});
+
 SpecEnd
